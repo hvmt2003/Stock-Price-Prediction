@@ -4,80 +4,95 @@ import yfinance as yf
 from keras.models import load_model
 import streamlit as st
 import matplotlib.pyplot as plt
+from sklearn.preprocessing import MinMaxScaler
+import datetime
 
-model=load_model('C:\\Users\\ADMIN\\OneDrive\\Desktop\\Stock Price  Prediction\\Stock Prediction_new.keras')
+st.set_page_config(page_title="Stock Market Predictor", layout="wide")
+st.title("📈 Stock Market Predictor")
 
-st.header('Stock Market Predictor')
+# Load model (make sure model file is in your repo)
+try:
+    model = load_model("Stock_Prediction_new.keras")
+    st.success("Model loaded successfully!")
+except Exception as e:
+    st.error(f" Failed to load model: {e}")
+    model = None
 
 
-stock=st.text_input('Enter Stock Symbol','GOOG')
-start='2015-10-01'
-end='2025-10-01'
+# Stock symbol input
+stock = st.text_input("Enter Stock Symbol", "GOOG")
 
-data=yf.download(stock,start,end)
+# Date input
+start = st.date_input("Start Date", datetime.date(2015, 1, 1))
+end = st.date_input("End Date", datetime.date.today())
 
-st.subheader('Stock Data')
-st.write(data)
+# Button to fetch and process data
+if st.button("Fetch & Predict"):
+    if stock and model:
+        with st.spinner("Fetching stock data..."):
+            df = yf.download(stock, start=start, end=end)
+            if df.empty:
+                st.error("No data found for this stock symbol.")
+            else:
+                st.subheader("Stock Data (Last 5 rows)")
+                st.write(df.tail())
 
-data_train=pd.DataFrame(data.Close[0:int(len(data)*0.80)])
-data_test=pd.DataFrame(data.Close[int(len(data)*0.80):len(data)])
+                # Data preparation
+                data_train = pd.DataFrame(df.Close[0:int(len(df)*0.8)])
+                data_test = pd.DataFrame(df.Close[int(len(df)*0.8):])
 
-from  sklearn.preprocessing import MinMaxScaler
+                scaler = MinMaxScaler(feature_range=(0,1))
+                past_100_days = data_train.tail(100)
+                data_test = pd.concat([past_100_days, data_test], ignore_index=True)
+                data_test_scaled = scaler.fit_transform(data_test)
 
-scaler=MinMaxScaler(feature_range=(0,1))
+                # Moving averages plots
+                st.subheader("Price vs MA50")
+                ma50 = df.Close.rolling(50).mean()
+                fig1, ax1 = plt.subplots(figsize=(10,6))
+                ax1.plot(ma50, 'r', label='MA50')
+                ax1.plot(df.Close, 'g', label='Close Price')
+                ax1.legend()
+                st.pyplot(fig1)
 
-pas_100_days=data_train.tail(100)
-data_test=pd.concat([pas_100_days,data_test],ignore_index=True)
-data_test_scale=scaler.fit_transform(data_test)
+                st.subheader("Price vs MA50 vs MA100")
+                ma100 = df.Close.rolling(100).mean()
+                fig2, ax2 = plt.subplots(figsize=(10,6))
+                ax2.plot(ma50, 'r', label='MA50')
+                ax2.plot(ma100, 'b', label='MA100')
+                ax2.plot(df.Close, 'g', label='Close Price')
+                ax2.legend()
+                st.pyplot(fig2)
 
-st.subheader('Price vs MA50')
-ma_50_days=data.Close.rolling(50).mean()
-fig1=plt.figure(figsize=(10,8))
-plt.plot(ma_50_days,'r')
-plt.plot(data.Close,'g')
-plt.show()
-st.pyplot(fig1)
+                st.subheader("Price vs MA100 vs MA200")
+                ma200 = df.Close.rolling(200).mean()
+                fig3, ax3 = plt.subplots(figsize=(10,6))
+                ax3.plot(ma100, 'r', label='MA100')
+                ax3.plot(ma200, 'b', label='MA200')
+                ax3.plot(df.Close, 'g', label='Close Price')
+                ax3.legend()
+                st.pyplot(fig3)
 
-st.subheader('Price vs MA50 VS MA100')
-ma_100_days=data.Close.rolling(100).mean()
-fig2=plt.figure(figsize=(10,8))
-plt.plot(ma_50_days,'r')
-plt.plot(ma_100_days,'b')
-plt.plot(data.Close,'g')
-plt.show()
-st.pyplot(fig2)
+                # Prepare data for prediction
+                x_test, y_test = [], []
+                for i in range(100, data_test_scaled.shape[0]):
+                    x_test.append(data_test_scaled[i-100:i])
+                    y_test.append(data_test_scaled[i,0])
+                x_test, y_test = np.array(x_test), np.array(y_test)
 
-st.subheader('Price vs MA100 VS MA200')
-ma_200_days=data.Close.rolling(200).mean()
-fig3=plt.figure(figsize=(10,8))
-plt.plot(ma_100_days,'r')
-plt.plot(ma_200_days,'b')
-plt.plot(data.Close,'g')
-plt.show()
-st.pyplot(fig3)
+                # Prediction
+                predict = model.predict(x_test)
+                scale = 1 / scaler.scale_[0]
+                predict = predict * scale
+                y_test = y_test * scale
 
-x=[]
-y=[]
-for i in range(100,data_test_scale.shape[0]):
-  x.append(data_test_scale[i-100:i])
-  y.append(data_test_scale[i,0])
-  
-x,y=np.array(x),np.array(y)
-
-predict=model.predict(x)
-
-scale=1/scaler.scale_
-
-predict=predict*scale
-
-y=y*scale
-
-st.subheader('Original Price vs Predicted')
-fig4=plt.figure(figsize=(8,6))
-plt.plot(predict,'r',label='Original Price')
-plt.plot(y,'g',label='Predicted Price')
-plt.xlabel('Time')
-plt.ylabel('Price')
-plt.legend()
-plt.show()
-st.pyplot(fig4)
+                st.subheader("Original vs Predicted Prices")
+                fig4, ax4 = plt.subplots(figsize=(10,6))
+                ax4.plot(y_test, 'g', label="Original Price")
+                ax4.plot(predict, 'r', label="Predicted Price")
+                ax4.set_xlabel("Time")
+                ax4.set_ylabel("Price")
+                ax4.legend()
+                st.pyplot(fig4)
+    else:
+        st.warning("Please enter a valid stock symbol and ensure the model is loaded.")
