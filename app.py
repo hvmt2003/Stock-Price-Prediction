@@ -55,10 +55,16 @@ if st.button("Fetch & Predict"):
                 # --- DATA PREPARATION ---
                 data_train = pd.DataFrame(df.Close[0:int(len(df)*0.8)])
                 data_test = pd.DataFrame(df.Close[int(len(df)*0.8):])
-                scaler = MinMaxScaler(feature_range=(0,1))
+                # --- CORRECTED SCALING ---
+                scaler = MinMaxScaler(feature_range=(0, 1))
+
+                # Fit scaler ONLY on training data
+                scaled_train = scaler.fit_transform(data_train)
+
+                # Prepare test data (use same scaler)
                 past_100_days = data_train.tail(100)
                 data_test = pd.concat([past_100_days, data_test], ignore_index=True)
-                data_test_scaled = scaler.fit_transform(data_test)
+                data_test_scaled = scaler.transform(data_test)
 
                 # --- MOVING AVERAGES PLOTS ---
                 ma50 = df.Close.rolling(50).mean()
@@ -96,15 +102,20 @@ if st.button("Fetch & Predict"):
                 x_test, y_test = np.array(x_test), np.array(y_test)
 
                 predict = model.predict(x_test)
-                scale = 1 / scaler.scale_[0]
-                predict = predict * scale
-                y_test = y_test * scale
+                predict = scaler.inverse_transform(predict)
+                y_test = scaler.inverse_transform(y_test.reshape(-1, 1))
 
                 st.subheader("Original vs Predicted Prices")
                 fig4, ax4 = plt.subplots(figsize=(10,6))
-                ax4.plot(y_test, 'g', label="Original Price")
-                ax4.plot(predict, 'r', label="Predicted Price")
-                ax4.set_xlabel("Time")
-                ax4.set_ylabel("Price")
+                # --- USE REAL DATES ON X-AXIS ---
+                test_dates = df.index[int(len(df)*0.8):]  # Dates for test period
+
+                fig4, ax4 = plt.subplots(figsize=(10,6))
+                ax4.plot(test_dates, y_test, 'g', label="Original Price")
+                ax4.plot(test_dates, predict, 'r', label="Predicted Price")
+                ax4.set_xlabel("Date")
+                ax4.set_ylabel("Price (USD)")
                 ax4.legend()
+                fig4.autofmt_xdate()
                 st.pyplot(fig4)
+
