@@ -8,6 +8,14 @@ from sklearn.preprocessing import MinMaxScaler
 import datetime
 import os
 
+def get_currency(symbol):
+    symbol = symbol.upper()
+    if symbol.endswith(".NS") or symbol.endswith(".BSE") or symbol.endswith(".BO"):
+        return "₹"  # Indian Rupee
+    else:
+        return "$"  # US Dollar
+
+
 st.set_page_config(page_title="Stock Market Predictor", layout="wide")
 st.title("Stock Price Predictor")
 
@@ -114,7 +122,9 @@ if st.button("Fetch & Predict"):
                 ax4.plot(test_dates, y_test, 'g', label="Original Price")
                 ax4.plot(test_dates, predict, 'r', label="Predicted Price")
                 ax4.set_xlabel("Date")
-                ax4.set_ylabel("Price (USD)")
+                currency_symbol = get_currency(stock)
+                ax4.set_ylabel(f"Price ({currency_symbol})")
+
                 ax4.legend()
                 fig4.autofmt_xdate()
                 st.pyplot(fig4)
