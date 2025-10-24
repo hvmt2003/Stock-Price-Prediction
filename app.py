@@ -9,7 +9,7 @@ import datetime
 import os
 
 st.set_page_config(page_title="Stock Market Predictor", layout="wide")
-st.title("📈 Stock Market Predictor")
+st.title("Stock Price Predictor")
 
 # --- MODEL LOADING ---
 model_file_h5 = "Stock_Prediction_new.h5"
