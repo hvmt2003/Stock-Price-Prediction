@@ -127,28 +127,29 @@ if st.button("Fetch & Predict"):
 
 
 # ===============================
-# 🚀 FUTURE FORECAST BUTTON BELOW
+# FUTURE FORECAST WITH SLIDER
 # ===============================
 
-if st.button("Predict Future 30 Days"):
+future_days = st.slider("Select number of days to forecast", 1, 30, 7)
+
+if st.button("Predict Future Prices"):
     if 'df' not in st.session_state:
         st.error("Please fetch and predict first before forecasting future prices.")
     elif model is None:
         st.warning("Model not loaded. Please check your model file.")
     else:
         df = st.session_state['df']
-        st.subheader("Predicting Next 30 Days...")
+        st.subheader(f"Predicting Next {future_days} Days...")
 
         # --- SCALE THE DATA ---
         scaler = MinMaxScaler(feature_range=(0, 1))
         scaled_data = scaler.fit_transform(df['Close'].values.reshape(-1, 1))
 
         # --- TAKE LAST 100 DAYS AS INPUT FOR FORECAST ---
-        last_100_days = scaled_data[-100:]
-        last_100_days = list(last_100_days)
-
+        last_100_days = list(scaled_data[-100:])
         future_output = []
-        for i in range(30):  # predict next 30 days
+
+        for i in range(future_days):
             x_input = np.array(last_100_days[-100:]).reshape(1, 100, 1)
             y_pred = model.predict(x_input, verbose=0)
             last_100_days.append(y_pred[0])
@@ -159,22 +160,22 @@ if st.button("Predict Future 30 Days"):
 
         # --- CREATE FUTURE DATES ---
         last_date = df.index[-1]
-        future_dates = [last_date + datetime.timedelta(days=i+1) for i in range(30)]
+        future_dates = [last_date + datetime.timedelta(days=i+1) for i in range(future_days)]
         future_df = pd.DataFrame({'Date': future_dates, 'Predicted_Price': future_output.flatten()})
         future_df.set_index('Date', inplace=True)
 
         # --- PLOT HISTORICAL + FUTURE ---
-        st.subheader(" Historical vs Future Predicted Prices")
-        fig5, ax5 = plt.subplots(figsize=(10,6))
-        ax5.plot(df['Close'], label="Historical Price", color='blue')
-        ax5.plot(future_df['Predicted_Price'], label="Predicted Future Price", linestyle='dashed', color='orange')
-        ax5.set_xlabel("Date")
-        ax5.set_ylabel(f"Price ({get_currency(stock)})")
-        ax5.legend()
-        st.pyplot(fig5)
+        st.subheader("Historical vs Future Predicted Prices")
+        fig, ax = plt.subplots(figsize=(10,6))
+        ax.plot(df['Close'], label="Historical Price", color='blue')
+        ax.plot(future_df['Predicted_Price'], label="Predicted Future Price", linestyle='dashed', color='orange')
+        ax.set_xlabel("Date")
+        ax.set_ylabel(f"Price ({get_currency(stock)})")
+        ax.legend()
+        st.pyplot(fig)
 
         # --- SHOW TABLE ---
-        st.subheader("30-Day Forecasted Prices")
+        st.subheader(f"{future_days}-Day Forecasted Prices")
         st.dataframe(future_df.style.format({"Predicted_Price": "{:.2f}"}))
 
         st.success("Future Forecast Completed Successfully!")
