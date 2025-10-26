@@ -8,6 +8,7 @@ from sklearn.preprocessing import MinMaxScaler
 import datetime
 import os
 
+# --- FUNCTION TO GET CURRENCY SYMBOL BASED ON STOCK EXCHANGE ---
 def get_currency(symbol):
     symbol = symbol.upper()
     if symbol.endswith(".NS") or symbol.endswith(".BSE") or symbol.endswith(".BO"):
@@ -17,7 +18,7 @@ def get_currency(symbol):
 
 
 st.set_page_config(page_title="Stock Market Predictor", layout="wide")
-st.title("Stock Price Predictor")
+st.title("📈 Stock Price Predictor")
 
 # --- MODEL LOADING ---
 model_file_h5 = "Stock_Prediction_new.h5"
@@ -43,7 +44,7 @@ end = st.date_input("End Date", datetime.date.today())
 def get_stock_data(symbol, start, end):
     return yf.download(symbol, start=start, end=end)
 
-# --- BUTTON ACTION ---
+# --- FETCH DATA & PREDICT HISTORICAL ---
 if st.button("Fetch & Predict"):
     if not stock:
         st.warning("Please enter a stock symbol.")
@@ -57,19 +58,17 @@ if st.button("Fetch & Predict"):
             if df.empty:
                 st.error("No data found for this stock symbol.")
             else:
+                st.session_state['df'] = df  # Save data for future use
                 st.subheader("Stock Data (Last 5 rows)")
                 st.write(df.tail())
 
                 # --- DATA PREPARATION ---
                 data_train = pd.DataFrame(df.Close[0:int(len(df)*0.8)])
                 data_test = pd.DataFrame(df.Close[int(len(df)*0.8):])
-                # --- CORRECTED SCALING ---
-                scaler = MinMaxScaler(feature_range=(0, 1))
 
-                # Fit scaler ONLY on training data
+                scaler = MinMaxScaler(feature_range=(0, 1))
                 scaled_train = scaler.fit_transform(data_train)
 
-                # Prepare test data (use same scaler)
                 past_100_days = data_train.tail(100)
                 data_test = pd.concat([past_100_days, data_test], ignore_index=True)
                 data_test_scaled = scaler.transform(data_test)
@@ -102,7 +101,7 @@ if st.button("Fetch & Predict"):
                 ax3.legend()
                 st.pyplot(fig3)
 
-                # --- PREDICTION ---
+                # --- PREDICTION ON TEST DATA ---
                 x_test, y_test = [], []
                 for i in range(100, data_test_scaled.shape[0]):
                     x_test.append(data_test_scaled[i-100:i])
@@ -114,9 +113,7 @@ if st.button("Fetch & Predict"):
                 y_test = scaler.inverse_transform(y_test.reshape(-1, 1))
 
                 st.subheader("Original vs Predicted Prices")
-                fig4, ax4 = plt.subplots(figsize=(10,6))
-                # --- USE REAL DATES ON X-AXIS ---
-                test_dates = df.index[int(len(df)*0.8):]  # Dates for test period
+                test_dates = df.index[int(len(df)*0.8):]
 
                 fig4, ax4 = plt.subplots(figsize=(10,6))
                 ax4.plot(test_dates, y_test, 'g', label="Original Price")
@@ -124,8 +121,60 @@ if st.button("Fetch & Predict"):
                 ax4.set_xlabel("Date")
                 currency_symbol = get_currency(stock)
                 ax4.set_ylabel(f"Price ({currency_symbol})")
-
                 ax4.legend()
                 fig4.autofmt_xdate()
                 st.pyplot(fig4)
 
+
+# ===============================
+# 🚀 FUTURE FORECAST BUTTON BELOW
+# ===============================
+
+if st.button("Predict Future 30 Days"):
+    if 'df' not in st.session_state:
+        st.error("Please fetch and predict first before forecasting future prices.")
+    elif model is None:
+        st.warning("Model not loaded. Please check your model file.")
+    else:
+        df = st.session_state['df']
+        st.subheader("Predicting Next 30 Days...")
+
+        # --- SCALE THE DATA ---
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        scaled_data = scaler.fit_transform(df['Close'].values.reshape(-1, 1))
+
+        # --- TAKE LAST 100 DAYS AS INPUT FOR FORECAST ---
+        last_100_days = scaled_data[-100:]
+        last_100_days = list(last_100_days)
+
+        future_output = []
+        for i in range(30):  # predict next 30 days
+            x_input = np.array(last_100_days[-100:]).reshape(1, 100, 1)
+            y_pred = model.predict(x_input, verbose=0)
+            last_100_days.append(y_pred[0])
+            future_output.append(y_pred[0])
+
+        # --- INVERSE TRANSFORM TO ORIGINAL SCALE ---
+        future_output = scaler.inverse_transform(np.array(future_output).reshape(-1, 1))
+
+        # --- CREATE FUTURE DATES ---
+        last_date = df.index[-1]
+        future_dates = [last_date + datetime.timedelta(days=i+1) for i in range(30)]
+        future_df = pd.DataFrame({'Date': future_dates, 'Predicted_Price': future_output.flatten()})
+        future_df.set_index('Date', inplace=True)
+
+        # --- PLOT HISTORICAL + FUTURE ---
+        st.subheader(" Historical vs Future Predicted Prices")
+        fig5, ax5 = plt.subplots(figsize=(10,6))
+        ax5.plot(df['Close'], label="Historical Price", color='blue')
+        ax5.plot(future_df['Predicted_Price'], label="Predicted Future Price", linestyle='dashed', color='orange')
+        ax5.set_xlabel("Date")
+        ax5.set_ylabel(f"Price ({get_currency(stock)})")
+        ax5.legend()
+        st.pyplot(fig5)
+
+        # --- SHOW TABLE ---
+        st.subheader("30-Day Forecasted Prices")
+        st.dataframe(future_df.style.format({"Predicted_Price": "{:.2f}"}))
+
+        st.success("Future Forecast Completed Successfully!")
