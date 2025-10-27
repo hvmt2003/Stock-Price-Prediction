@@ -159,7 +159,7 @@ if page == "Dashboard":
 # FORECAST SECTION
 # --------------------------
 elif page == "Forecast":
-    st.header("🔮 Future Price Forecasting")
+    st.header("Future Price Forecasting")
     future_days = st.slider("Select forecast days", 1, 60, 7)
 
     if st.button("Predict Future Prices"):
